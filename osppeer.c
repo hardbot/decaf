@@ -642,6 +642,8 @@ static void task_upload(task_t *t)
 			break;
 	}
 
+  // Excercise 2B:
+
 	assert(t->head == 0);
 	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
 		error("* Odd request %.*s\n", t->tail, t->buf);
@@ -779,21 +781,34 @@ int main(int argc, char *argv[])
     }
 
   childPid = -1;
+  int status = 0;
+  int return_val = -1;
+  int fork_cnt = 0;
 	// Then accept connections from other peers and upload files to them!
 	while (1)
   {
-    childPid = fork();
-    if (childPid>=0)
+    if (fork_cnt > 0) 
     {
-      if(childPid == 0)
+        // Wait before processing more forks
+        if (waitpid(-1, &status, WNOHANG) >= 0)
+          fork_cnt--;
+    }
+    // Limit amount of forks to 100
+    if (fork_cnt < 100)
+    {
+      childPid = fork();
+      if (childPid>=0)
       {
-	      t = task_listen(listen_task);
-		    task_upload(t);
-        _exit(0);
-      }
-      else
-      {
-        // Do Nothing
+        if(childPid == 0)
+        {
+          t = task_listen(listen_task);
+          task_upload(t);
+          _exit(0);
+        }
+        else
+        {
+          fork_cnt++;
+        }
       }
     }
   }
