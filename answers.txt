@@ -24,6 +24,10 @@ Email: fahadnathani@ucla.edu
 
 # EXERCISE 1: What method you used to make your peer download and upload
 #    files in parallel?  (~1-3 sentences)
+We used the fork() command to create parallel processes to download and upload 
+each task.  All of the downloads are first processed in parallel by forking a 
+new process from the parent for each task that needs to be downloaded.  We then
+proceeded to process the uploads in the same manner.
 
 
 # EXERCISE 2A: What conditions did you find and fix that would have
@@ -31,6 +35,32 @@ Email: fahadnathani@ucla.edu
 
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
+
+1. Access to directories other than current
+  We found that there was a bug where someone could send a request with a 
+  filename that included a directory, which would allow them to download a 
+  file from anywhere on the machine.  We fixed this by preventing the filename 
+  from being greater than FILENAMSIZ and checking the file name for the 
+  character '/' which denotes a directory path.
+
+2. Overrunning drive space
+  Another peer could continiously upload a file endlessly and fill up our 
+  entire disk drive.  We fixed this bug by disallowing any download of a 
+  file greater than 2 gigabytes, an arbitrary value for a really big file.  
+  If we find that we are downloading a file greater than the max value, we 
+  simply try again with a different peer.
+
+3. Slow Transfer Rate
+  Some peers download/upload at an incredibly slow transfer rate which 
+  halts the rest of the program.  We fix this by first sampling the 
+  current transfer rate and comparing it to a minimum transfer rate
+  allowed.  Currently we have set it to 128bytes/sec, which can be
+  changed depending on the network.
+
+4. Bigger Task Buffer Size
+  When we try and get popular trackers, the program crashes due to not
+  have a large enough capacity to handle all of the peers.  We increased
+  the buffer size to 128 kilobytes to handle all of the new traffic.  
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
