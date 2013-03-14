@@ -28,18 +28,36 @@ Email: fahadnathani@ucla.edu
 
 # EXERCISE 2A: What conditions did you find and fix that would have
 #    triggered a buffer overrun bug?  (~1-3 sentences each)
-1.
+1. In task_upload, osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) 
+is called, which reads from t->buffer of a pattern "GET %s OSP2P\n", and stores this 
+%s string in t->filename. Since this is snscanf instead of sscanf, the second parameter, 
+in this case t->tail, indicates the length of the string to be placed into t->filename. 
+This presents a potential buffer overrun bug since t->tail could be over FILENAMESIZ. 
+To prevent this possible overloading of the buffer, we changed this second parameter to 
+FILENAMESIZ-1 to ensure that the filename buffer cannot be overrun.
 
-
-2. If downloading a file with a filename length longer than FILENAMESIZE-1, the filename buffer could be overflowed and thus this could be exploited. In order to prevent this exploit, we fixed the buffer overflow error by using strncpy instead of strcpy. Because strncpy lets us specify the length of the string we want to copy, we can limit the length size so that it does not go over the FILENAMESIZ length limit. Also, we added a null turminator to the end of each filebuffer in the case of when the buffer could be copied or read later on.
-
-
+2. If downloading a file with a filename length longer than FILENAMESIZ-1, the filename buffer 
+could be overflowed and thus this could be exploited. In order to prevent this exploit, we fixed 
+the buffer overflow error by using strncpy instead of strcpy in the start_download function. 
+Because strncpy lets us specify the length of the string we want to copy, we can limit the 
+length size so that it does not go over the FILENAMESIZ length limit. Also, we added a null terminator 
+to the end of each filebuffer in the case of when the buffer could be copied or read later on.
 
 # EXERCISE 2B: What other robustness problems did you fix?  (~1-3 sentences
 #    each)
 
 # EXERCISE 3: Describe the attacks you implemented for "evil mode".  Why
 #    are they attacks?  (~3-10 sentences each)
+
+Attack during download: If the evil_mode flag is set, send the victim a request for a file with a filename length that 
+is way over the filename buffer size. In the code, we use a filename of length 20000. This is a malicious attack because if a 
+large filename was passed in, if the peer does not account for buffer overflow using the security feature we implemented, the peer will segfault since they will be using strcpy.
+
+Attack during upload: If the evil_mode flag is set, when a peer requests to download a file from us, we upload
+an infinite stream of garbage data that is never terminated by an end variable. If the peer does not have 
+a security implementation of timing out, the peer will constantly keep downloading a file forever and
+for an unlimited size. If the peer executes in parallel, this could result in a thread never finishing,
+and if the peer executes downloads serially, this could result in a continuous download with no termination.
 
 # Extra credit problems
 #Extra credit problem: none

