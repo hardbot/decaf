@@ -35,8 +35,16 @@ static int listen_port;
  * a bounded buffer that simplifies reading from and writing to peers.
  */
 
-#define TASKBUFSIZ	4096	// Size of task_t::buf
+// Exercise 2B:
+// Increase task buffer size to 128 kilobytes to account for more popular trackers
+#define TASKBUFSIZ 131072 // Size of new task_t::buf, now 128 kilobytes.
+//#define TASKBUFSIZ	4096	// Size of task_t::buf
 #define FILENAMESIZ	256	// Size of task_t::filename
+#define MAXFILESIZ 2147483648 // Size of Max file allowed to be downloaded (2gigabytes)
+#define SAMPLESIZ 8 // Size of sampling done to compute transfer rate
+#define MINTRANSFERRATE 128 // Minimum transfer rate a peer must have
+
+
 
 typedef enum tasktype {		// Which type of connection is this?
 	TASK_TRACKER,		// => Tracker connection
@@ -504,7 +512,7 @@ task_t *start_download(task_t *tracker_task, const char *filename)
 //	until a download is successful.
 static void task_download(task_t *t, task_t *tracker_task)
 {
-	int i, ret = -1;
+	int i, ret = -1, read_rate = 0, read_cnt = 0;
 	assert((!t || t->type == TASK_DOWNLOAD)
 	       && tracker_task->type == TASK_TRACKER);
 
@@ -580,10 +588,29 @@ static void task_download(task_t *t, task_t *tracker_task)
 		if (ret == TBUF_ERROR) {
 			error("* Disk write error");
 			goto try_again;
-		}
-	}
+    }
 
-	// Empty files are usually a symptom of some error.
+    // Exercise 2B:
+    // Prevent writing more than max file size
+    if(t->total_written > MAXFILESIZ)
+    {
+      error("* File too big, please try again\n");
+      goto try_again;
+    }
+
+    // Exercise 2B:
+    // Prevent slow transfer rate from stalling the program
+    read_rate = t->total_written/read_cnt;
+    if (read_cnt >= SAMPLESIZ && read_rate < MINTRANSFERRATE)
+    {
+      error("* Transfer rate between peer is too slow\n");
+      goto try_again;
+    }
+
+    read_cnt++;
+  }
+
+  // Empty files are usually a symptom of some error.
 	if (t->total_written > 0) {
 		message("* Downloaded '%s' was %lu bytes long\n",
 			t->disk_filename, (unsigned long) t->total_written);
@@ -654,6 +681,7 @@ static void task_upload(task_t *t)
 			break;
 	}
 
+
 	assert(t->head == 0);
 	/*
 	if(t->tail > FILENAMESIZ)
@@ -666,6 +694,19 @@ static void task_upload(task_t *t)
 		goto exit;
 	}
 	t->head = t->tail = 0;
+
+  // Excercise 2B:
+  // Check if filae name is too long
+  if(strlen(t->filename) > FILENAMESIZ)
+  {
+    error("* Filename too long\n");
+    goto exit;
+  }
+  if(strchr(t->filename, '/') != NULL)
+  {
+    error("* Filename: %s refers to directory\n", t->filename);
+    goto exit;
+  }
 
 	t->disk_fd = open(t->filename, O_RDONLY);
 	if (t->disk_fd == -1) {
@@ -817,21 +858,34 @@ int main(int argc, char *argv[])
     }
 
   childPid = -1;
+  int status = 0;
+  int return_val = -1;
+  int fork_cnt = 0;
 	// Then accept connections from other peers and upload files to them!
 	while (1)
   {
-    childPid = fork();
-    if (childPid>=0)
+    if (fork_cnt > 0) 
     {
-      if(childPid == 0)
+        // Wait before processing more forks
+        if (waitpid(-1, &status, WNOHANG) >= 0)
+          fork_cnt--;
+    }
+    // Limit amount of forks to 100
+    if (fork_cnt < 100)
+    {
+      childPid = fork();
+      if (childPid>=0)
       {
-	      t = task_listen(listen_task);
-		    task_upload(t);
-        _exit(0);
-      }
-      else
-      {
-        // Do Nothing
+        if(childPid == 0)
+        {
+          t = task_listen(listen_task);
+          task_upload(t);
+          _exit(0);
+        }
+        else
+        {
+          fork_cnt++;
+        }
       }
     }
   }
