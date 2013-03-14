@@ -760,14 +760,45 @@ int main(int argc, char *argv[])
 	listen_task = start_listen();
 	register_files(tracker_task, myalias);
 
+  pid_t childPid;
 	// First, download files named on command line.
 	for (; argc > 1; argc--, argv++)
 		if ((t = start_download(tracker_task, argv[1])))
-			task_download(t, tracker_task);
+    {
+      childPid = fork();
+      if (childPid>=0)
+      {
+        if(childPid == 0)
+        {
+			    task_download(t, tracker_task);
+          _exit(0);
+        }
+        else
+        {
+          // Do Nothing
+        }
+      }
+    }
 
+  childPid = -1;
 	// Then accept connections from other peers and upload files to them!
-	while ((t = task_listen(listen_task)))
-		task_upload(t);
+	while (1)
+  {
+    childPid = fork();
+    if (childPid>=0)
+    {
+      if(childPid == 0)
+      {
+	      t = task_listen(listen_task);
+		    task_upload(t);
+        _exit(0);
+      }
+      else
+      {
+        // Do Nothing
+      }
+    }
+  }
 
 	return 0;
 }
